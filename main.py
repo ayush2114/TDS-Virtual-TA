@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from typing import List, Dict
 import requests
 import os
 import httpx
@@ -29,8 +30,8 @@ def get_ai_answer(messages, tools):
     payload = {
         "model": "mistralai/mistral-small-3.1-24b-instruct:free",
         "messages": messages,
-        "tools": tools,
-        "tool_choice": "required",
+        # "tools": tools,
+        # "tool_choice": "auto",
         "stream": False,
     }
     headers = {
@@ -54,115 +55,69 @@ async def root():
 async def health_check():
     return {"status": "ok"}
 
+image_path = "image2.jpg"
 
-json_schema = {
-  "type": "object",
-  "properties": {
-    "answer": {
-      "type": "string",
-      "description": "The main textual answer or clarification"
-    },
-    "links": {
-      "type": "array",
-      "description": "List of supporting links for reference",
-      "items": {
+my_func = {
+    "name": "product_info",
+    "description": "Generates product manufacturing date, expiry date and answers user's question",
+    "strict": True,
+    "parameters": {
         "type": "object",
+        "required": [
+            "mfd",
+            "expiry_date",
+            "user_question"
+        ],
         "properties": {
-          "url": {
-            "type": "string",
-            "format": "uri",
-            "description": "URL to a forum post or reference"
-          },
-          "text": {
-            "type": "string",
-            "description": "Textual description or title of the link"
-          }
-        },
-        "required": ["url", "text"]
-      }
-    }
-  },
-  "required": ["answer", "links"]
-}
-
-
-tools = [
-    {
-      "type": "function",
-      "function": {
-        "name": "get_answer",
-        "description": "Get the answer to a question",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "location": {
-              "type": "string",
-              "description": "The location to get the weather for, e.g. San Francisco, CA"
+            "mfd": {
+                "type": "string",
+                "description": "Manufacturing date of the product in YYYY format"
             },
-            "format": {
-              "type": "string",
-              "description": "The format to return the weather in, e.g. 'celsius' or 'fahrenheit'",
-              "enum": ["celsius", "fahrenheit"]
+            "expiry_date": {
+                "type": "string",
+                "description": "Expiry date of the product in YYYY format"
+            },
+            "user_question": {
+                "type": "string",
+                "description": "The user's question regarding the product"
+            },
+            "name": {
+                "type": "string",
+                "description": "Name of the product"
             }
-          },
-          "required": ["location", "format"]
-        }
-      }
+        },
+        "additionalProperties": False
     }
-]
-
-question = "What is product name?"
-image_path = "image.png"
+}
 
 messages = [
     {
         "role": "system",
         "content": "Answer within 3 words."
-    },
-    {
-        "role": "user",
-        "content": question
-    },
-    {
-        "role": "user",
-        "content": image_to_base64(image_path)
     }
 ]
 
 b64 = image_to_base64(image_path)
-image_64_data = {"type": "input_image", "image_url": f"data:image/png;base64,{b64}"}
+image_64_data = {"type": "image_url", "image_url": {"url": f"data:image/jpg;base64,{b64}"}}
 
-messeges.append({
+messages.append({
     "role": "user",
-    "content": [{"type": "text", "text": "Extract mfd"}]
+    "content": [{"type": "text", "text": "Extract all info"}, image_64_data]
 })
 
 @app.post("/ask")
-async def ask_question(question: str):
-    messages = [
-        {
-            "role": "user",
-            "content": question
-        }
-    ]
+async def ask_question(messages: List[dict] = messages, tools: List[Dict] = [my_func]):
     
-    response = get_ai_answer(messages, tools)
+    response = get_ai_answer(messages=messages, tools=tools)
     
+    # answer = response.get("choices", [{}])[0].get("message", {}).get("content", "")
     if "error" in response:
         return {"error": response["error"], "details": response.get("details", "")}
-    
-    answer = response.get("choices", [{}])[0].get("message", {}).get("content", "")
-    
-    return {
-        "answer": answer,
-        "links": [
-            {
-                "url": "https://example.com",
-                "text": "Example Link"
-            }
-        ]
-    }
+    return response
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, port=8000)
+
+# To run the FastAPI app, use the command:
+# uvicorn main:app --reload
