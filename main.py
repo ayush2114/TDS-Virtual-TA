@@ -18,6 +18,8 @@ app.add_middleware(
 )
 
 API_KEY = os.getenv("OPENROUTER_API_KEY")
+AIPROXY_TOKEN = os.getenv("AIPROXY_TOKEN")
+
 
 def image_to_base64(image_path):
     """Convert an image file to a base64 encoded string."""
@@ -25,37 +27,35 @@ def image_to_base64(image_path):
         encoded_string = base64.b64encode(image_file.read()).decode()
     return encoded_string
 
-def get_ai_answer(messages, tools):
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    payload = {
-        "model": "mistralai/mistral-small-3.1-24b-instruct:free",
-        "messages": messages,
-        # "tools": tools,
-        # "tool_choice": "auto",
-        "stream": False,
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "answer_user_question",
+            "description": "Answer the user's question",
+            # "strict": True,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "answer": {
+                        "type": "string",
+                        "description": "Answer to the user's question based on tools in data science course",
+                    },
+                    "links": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "description": "Links to relevant resources or information"
+                        },
+                        "description": "Links to relevant resources or information"
+                    }
+                },
+                "required": ["answer", "links"],
+            }
+        }
     }
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {API_KEY}"  # Replace with your actual API key if needed
-    }
-    response = requests.post(url, json=payload, headers=headers)
-    if response.status_code != 200:
-        print("Status code:", response.status_code)
-        print("Response text:", response.text)
-        return {"error": "Failed to get a response from the model", "details": response.text}
-    return response.json()
-
-
-@app.get("/")
-async def root():
-    return {"message": "Hello, World!"}
-
-
-@app.get("/health")
-async def health_check():
-    return {"status": "ok"}
-
-image_path = "image2.jpg"
+]
 
 my_func = {
     "name": "product_info",
@@ -66,7 +66,8 @@ my_func = {
         "required": [
             "mfd",
             "expiry_date",
-            "user_question"
+            "user_question",
+            "name"
         ],
         "properties": {
             "mfd": {
@@ -79,7 +80,7 @@ my_func = {
             },
             "user_question": {
                 "type": "string",
-                "description": "The user's question regarding the product"
+                "description": "The user's question regarding tools in data science course"
             },
             "name": {
                 "type": "string",
@@ -90,30 +91,121 @@ my_func = {
     }
 }
 
-messages = [
-    {
-        "role": "system",
-        "content": "Answer within 3 words."
+tools2 = [{"type": "function", "function": my_func}]
+
+def get_gpt_answer(messages):
+    url = "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions"
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": messages,
+        "tools": tools2,
+        "tool_choice": "required",
+        "stream": False,
     }
-]
+    headers = {
+        "Content-Type": "application/json",
+        # Replace with your actual API key if needed
+        "Authorization": f"Bearer {AIPROXY_TOKEN}"
+    }
+    response = requests.post(url, json=payload, headers=headers)
+    return response.json()
 
-b64 = image_to_base64(image_path)
-image_64_data = {"type": "image_url", "image_url": {"url": f"data:image/jpg;base64,{b64}"}}
 
-messages.append({
-    "role": "user",
-    "content": [{"type": "text", "text": "Extract all info"}, image_64_data]
-})
+def get_ai_answer(messages):
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    payload = {
+        "model": "mistralai/mistral-small-3.1-24b-instruct:free",
+        "messages": messages,
+        "tools": tools,
+        "tool_choice": "required",
+        "stream": False,
+    }
+    headers = {
+        "Content-Type": "application/json",
+        # Replace with your actual API key if needed
+        "Authorization": f"Bearer {API_KEY}"
+    }
+    response = requests.post(url, json=payload, headers=headers)
+    if response.status_code != 200:
+        print("Status code:", response.status_code)
+        print("Response text:", response.text)
+        return {"error": "Failed to get a response from the model", "details": response.text}
+    return response.json()
+
+
+sample_question = "What is the value of e?"
+sample_image_path = "image2.jpg"
+
+
+def prepare_messages(question: str = sample_question, image_path: str = sample_image_path) -> List[Dict]:
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant for the Tools in Data Science course at IIT Madras. Answer accurately and briefly, and include links if available."
+        },
+        {
+            "role": "user",
+            "content": [
+                { "type": "text", "text": question },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpg;base64,{image_to_base64(image_path)}"
+                    }
+                }
+            ]
+        }
+    ]
+
+    # Add text content
+    # messages[-1]["content"].append({
+    #     "type": "text",
+    #     "text": question
+    # })
+
+    # # Add image if provided
+    # b64 = image_to_base64(image_path)
+    # image_data = {
+    #     "type": "image_url",
+    #     "image_url": {
+    #         "url": f"data:image/jpg;base64,{b64}"
+    #     }
+    # }
+    # messages[-1]["content"].append(image_data)
+
+    return messages
+
+
+@app.get("/")
+async def root():
+    return {"message": "Hello, World!"}
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
+messages = prepare_messages()
+
 
 @app.post("/ask")
-async def ask_question(messages: List[dict] = messages, tools: List[Dict] = [my_func]):
-    
-    response = get_ai_answer(messages=messages, tools=tools)
-    
+async def ask_question(messages: List[dict] = messages):
+
+    response = get_ai_answer(messages=messages)
+
     # answer = response.get("choices", [{}])[0].get("message", {}).get("content", "")
     if "error" in response:
         return {"error": response["error"], "details": response.get("details", "")}
     return response
+
+@app.post("/gpt-ask")
+async def gpt_ask_question(messages: List[dict] = messages):
+    response = get_gpt_answer(messages=messages)
+
+    if "error" in response:
+        return {"error": response["error"], "details": response.get("details", "")}
+    return response
+
 
 if __name__ == "__main__":
     import uvicorn
