@@ -1,0 +1,37 @@
+{
+    "id": "gen-1749554340-vUoftpygypzuWJKcAnNH",
+    "provider": "Chutes",
+    "model": "mistralai/mistral-small-3.1-24b-instruct:free",
+    "object": "chat.completion",
+    "created": 1749554341,
+    "choices": [
+        {
+            "logprobs": null,
+            "finish_reason": null,
+            "native_finish_reason": null,
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": "",
+                "refusal": null,
+                "reasoning": null,
+                "tool_calls": [
+                    {
+                        "id": "chatcmpl-tool-d82e1a4cf2584fa3a0882bce4a936b2f",
+                        "type": "function",
+                        "index": 0,
+                        "function": {
+                            "name": "answer_user_question",
+                            "arguments": "{\"answer\": \"Both Docker and Podman can be used, so you can use either for this course.\", \"links\": [\"https://stackoverflow.com/questions/58207763/podman-vs-docker\"]}"
+                        }
+                    }
+                ]
+            }
+        }
+    ],
+    "usage": {
+        "prompt_tokens": 761,
+        "completion_tokens": 63,
+        "total_tokens": 824
+    }
+}

@@ -55,6 +55,7 @@ Thumbs.db
 *.png
 *.gif
 *.bmp
+*.webp
 
 # Temporary files
 tmp/

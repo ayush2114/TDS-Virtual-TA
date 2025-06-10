@@ -134,10 +134,10 @@ def get_ai_answer(messages):
 
 
 sample_question = "What is the value of e?"
-sample_image_path = "image2.jpg"
+sample_image = image_to_base64("image2.jpg")
 
 
-def prepare_messages(question: str = sample_question, image_path: str = sample_image_path) -> List[Dict]:
+def prepare_messages(question: str = sample_question, image: str = sample_image) -> List[Dict]:
     messages = [
         {
             "role": "system",
@@ -150,7 +150,7 @@ def prepare_messages(question: str = sample_question, image_path: str = sample_i
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": f"data:image/jpg;base64,{image_to_base64(image_path)}"
+                        "url": f"data:image/jpg;base64,{sample_image}"
                     }
                 }
             ]
@@ -187,23 +187,38 @@ async def health_check():
 
 messages = prepare_messages()
 
+@app.get("/ask")
+async def ask_question_get():
+    return """
+    <h1>Ask a Question</h1>
+    <form action="/ask" method="post">
+    <label for="question">Question:</label><br>
+    <input type="text" id="question" name="question" value="What is the value of e?"><br>
+    <label for="image">Image Path:</label><br>
+    <input type="text" id="image" name="image" value="image2.jpg"><br>
+    <input type="submit" value="Submit">
+    </form>
+    <p>Use the /ask endpoint to ask a question with an image.</p>
+    <p>Use the /gpt-ask endpoint to ask a question using GPT-4o-mini.</p>
+    <p>Example question: "What is the value of e?"</p>
+    """
 
 @app.post("/ask")
-async def ask_question(messages: List[dict] = messages):
+async def ask_question(data: Dict[str, str]):
+    question = data.get("question", sample_question)
+    image = data.get("image", sample_image)
+    messages = prepare_messages(question=question, image=image)
 
     response = get_ai_answer(messages=messages)
 
     # answer = response.get("choices", [{}])[0].get("message", {}).get("content", "")
-    if "error" in response:
-        return {"error": response["error"], "details": response.get("details", "")}
+   
     return response
 
 @app.post("/gpt-ask")
-async def gpt_ask_question(messages: List[dict] = messages):
+async def gpt_ask_question(question: str = sample_question, image: str = sample_image):
+    messages = prepare_messages(question=question, image=image)
     response = get_gpt_answer(messages=messages)
-
-    if "error" in response:
-        return {"error": response["error"], "details": response.get("details", "")}
     return response
 
 
