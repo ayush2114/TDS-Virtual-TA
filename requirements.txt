@@ -1,0 +1,9 @@
+fastapi
+python-multipart
+python-dotenv
+requests
+uvicorn
+numpy
+semantic_text_splitter
+tqdm
+google-genai
