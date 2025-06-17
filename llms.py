@@ -120,6 +120,7 @@ class OpenRouter:
         }
         response = requests.post(self.url, headers=self.headers, json=payload)
         response.raise_for_status()
+        print(f"[DEBUG] OpenRouter response text: {response.text}") 
         return response.json()['choices'][0]['message']['tool_calls'][0]['function']['arguments']
 
 class Nomic:
