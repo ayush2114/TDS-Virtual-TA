@@ -7,6 +7,22 @@
 README.md
 *.md
 
+# One time run files
+project-tds-virtual-ta-promptfoo.yaml
+course_scraper.py
+discourse_scraper.py
+discourse_to_markdown.py
+markdown_to_embedding.py
+requiremments-dev.txt
+
+# scraped data files
+discourse_json
+tds_pages_md
+metadata.json
+discourse_posts.json
+discourse_md
+image_description_cache.json
+
 # Python cache
 __pycache__/
 *.py[cod]

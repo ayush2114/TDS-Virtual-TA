@@ -1,0 +1,10 @@
+__pycache__
+.venv
+.env
+discourse_json
+tds_pages_md
+metadata.json
+discourse_posts.json
+discourse_md
+image_description_cache.json
+.vercel

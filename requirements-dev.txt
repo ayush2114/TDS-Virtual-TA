@@ -1,0 +1,8 @@
+-r requirements.txt
+
+# Scraping and Chunking Libraries
+playwright
+markdownify
+beautifulsoup4
+semantic_text_splitter
+tqdm
