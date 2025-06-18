@@ -4,6 +4,10 @@ import os
 import json
 from typing import List, Dict, Any, Optional, Union
 import base64
+import mimetypes
+
+def get_mime_type(url):
+    return mimetypes.guess_type(url)[0] or "image/jpeg"
 
 prompt_template = """
 You are a helpful assistant for the 'Tools in Data Science' course. A user will ask a question, and you will receive relevant context about the course to help answer it.
@@ -120,7 +124,6 @@ class OpenRouter:
         }
         response = requests.post(self.url, headers=self.headers, json=payload)
         response.raise_for_status()
-        print(f"[DEBUG] OpenRouter response text: {response.text}") 
         return response.json()['choices'][0]['message']['tool_calls'][0]['function']['arguments']
 
 class Nomic:
@@ -177,204 +180,88 @@ class OpenAI:
             "Authorization": f"Bearer {os.environ.get('AIPROXY_TOKEN')}",
             "Content-Type": "application/json"
         }
-    
-    def generate_response(self, question: str, context: List[Dict[str, str]] = None, 
-                         image_path: Optional[str] = None) -> Dict[str, Any]:
+
+    def get_image_description(self, image: str) -> str:
         """
-        Generate a structured response with answer and links using OpenAI's function calling capabilities.
-        
+        Get a description of the image using the OpenAI API.
+
         Args:
-            question (str): User's question
-            context (List[Dict]): List of context documents with 'text' and 'url' fields
-            image_path (str, optional): Path to an image file if provided
-            
+            image (str): Base64-encoded image string.
+
         Returns:
-            Dict: Structured response with answer and links
+            str: The description of the image.
         """
-        print(f"[DEBUG] generate_response: Starting with question: '{question[:50]}...'")
-        print(f"[DEBUG] generate_response: Context provided: {len(context) if context else 0} items")
-        print(f"[DEBUG] generate_response: Image path: {image_path}")
-        
-        # Create system message
-        system_message = "You are a helpful teaching assistant. Answer questions based on the context provided."
-        
-        # Add image description to system message if an image is provided
-        if image_path:
-            try:
-                print(f"[DEBUG] generate_response: Getting image description for: {image_path}")
-                image_description = self.get_image_description(image_path)
-                print(f"[DEBUG] generate_response: Got image description, length: {len(image_description)}")
-                system_message += "\n\nThe user has provided an image. Here is a detailed description of that image:\n\n"
-                system_message += image_description
-                system_message += "\n\nUse this image description along with any other context to answer the user's question."
-            except Exception as e:
-                print(f"[DEBUG] generate_response: Error getting image description: {str(e)}")
-                print(f"[DEBUG] generate_response: Error type: {type(e).__name__}")
-        
-        print(f"[DEBUG] generate_response: Final system message length: {len(system_message)}")
-        messages = [{"role": "system", "content": system_message}]
-        
-        # Add context message if available
-        if context:
-            context_str = "\n\n".join([f"Source ({doc['url']}):\n{doc['text']}" for doc in context])
-            messages.append({"role": "system", "content": f"Use the following context to answer the question:\n\n{context_str}"})
-        
-        # Create the user message with optional image
-        user_message = {"role": "user", "content": []}
-        
-        # Add text content
-        user_message["content"].append({
-            "type": "text", 
-            "text": question
-        })
-        
-        # Add image content if provided
-        if image_path:
-            image_b64 = self._encode_image(image_path)
-            user_message["content"].append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/jpeg;base64,{image_b64}"
-                }
-            })
-        
-        messages.append(user_message)
-        
-        # Define the function for structured output
-        functions = [{
-            "type": "function",
-            "function": {
-                "name": "generate_structured_response",
-                "description": "Generate a structured response with an answer and relevant links",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "answer": {
-                            "type": "string",
-                            "description": "The answer to the user's question"
-                        },
-                        "links": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "url": {
-                                        "type": "string", 
-                                        "description": "URL of the source"
-                                    },
-                                    "text": {
-                                        "type": "string",
-                                        "description": "Brief description of what the source contains"
-                                    }
-                                }
-                            },
-                            "description": "Relevant sources that support the answer"
-                        }
-                    },
-                    "required": ["answer"]
-                }
-            }
-        }]
-        
-        # Prepare payload for API call
         payload = {
             "model": self.model,
-            "messages": messages,
-            "functions": functions,            "function_call": {"name": "generate_structured_response"},
-            "temperature": 0.3,
-            "max_tokens": 1000
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": image_prompt},{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image}"}}]}
+            ]
         }
         response = requests.post(self.url, headers=self.headers, json=payload)
         response.raise_for_status()
-        
-        # Extract function call response
-        function_call = response.json()["choices"][0]["message"]["function_call"]
-        structured_response = json.loads(function_call["arguments"])
-        return structured_response
+        return response.json()['choices'][0]['message']['content']
     
-    def get_image_description(self, image_path: str) -> str:
-        """
-        Get a detailed description of an image that can be used by an LLM to answer user questions.
-        
-        Args:
-            image_path (str): Path to the image file
-            
-        Returns:
-            str: Detailed description of the image
-        """
-        print(f"[DEBUG] get_image_description: Starting with image_path: {image_path}")
+    def get_image_description_from_url(self, image_url: str) -> str:
+        # print(f"DEBUG: Getting image description for: {image_url}")
         try:
-            # Encode the image to base64
-            print("[DEBUG] get_image_description: Encoding image to base64")
-            image_b64 = self._encode_image(image_path)
-            print(f"[DEBUG] get_image_description: Successfully encoded image, length: {len(image_b64)}")
-            
-            messages = [
-                {
-                    "role": "system", 
-                    "content": [
-                        {
-                            "type": "text", 
-                            "text": (
-                                "You are a vision assistant specialized in providing detailed descriptions of images "
-                                "for educational purposes. Analyze the image thoroughly and provide a comprehensive "
-                                "description covering:\n\n"
-                                "1. Primary subject/topic - What is the main focus of the image?\n"
-                                "2. Visual elements - Charts, graphs, diagrams, illustrations, screenshots, or photographs?\n"
-                                "3. Text content - Transcribe any visible text, formulas, code, or labels\n"
-                                "4. Data representation - Describe values, trends, and patterns in charts/graphs\n"
-                                "5. Educational context - How does this relate to teaching/learning?\n"
-                                "6. Technical details - For code/diagrams, explain technical elements\n\n"
-                                "Structure your response to be directly usable by an LLM to answer student questions about the image. "
-                                "Be specific, factual, and comprehensive."
-                            )
-                        }
-                    ]
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "Please provide a detailed description of this image."
-                        },                    {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{image_b64}"
-                            }
-                        }
-                    ]
-                }
-            ]
-            
+            # Download image
+            image_bytes = requests.get(image_url, timeout=10).content
+            mime_type = get_mime_type(image_url)
+            b64_image = base64.b64encode(image_bytes).decode("utf-8")
+
+            # Create request payload
+
             payload = {
-                "model": "gpt-4o-mini",  # Using GPT-4o-mini for best vision capabilities
-                "messages": messages,
-                "max_tokens": 1500
+                "model": self.model,  # or gpt-4o-mini if available
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "Briefly describe this image."},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:{mime_type};base64,{b64_image}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "max_tokens": 100
             }
-            
-            print("[DEBUG] get_image_description: Preparing to send request to OpenAI API")
-            print(f"[DEBUG] get_image_description: API key present: {'Yes' if os.environ.get('OPENAI_API_KEY') else 'No'}")
+
             response = requests.post(
-                "https://api.openai.com/v1/chat/completions",  # Use direct OpenAI API for vision
-                headers={
-                    "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}",
-                    "Content-Type": "application/json"
-                },
-                json=payload
+                self.url,
+                headers=self.headers,
+                json=payload,
             )
-            print(f"[DEBUG] get_image_description: Response status code: {response.status_code}")
-            response.raise_for_status()
-            
-            result = response.json()['choices'][0]['message']['content']
-            print(f"[DEBUG] get_image_description: Successfully got image description, length: {len(result)}")
-            return result
+
+            if response.status_code != 200:
+                raise Exception(f"OpenAI API error: {response.status_code} - {response.text}")
+
+            data = response.json()
+            description = data["choices"][0]["message"]["content"].strip()
+            return description
+
         except Exception as e:
-            print(f"[DEBUG] get_image_description: Error: {str(e)}")
-            print(f"[DEBUG] get_image_description: Error type: {type(e).__name__}")
-            if hasattr(e, 'response') and e.response is not None:
-                print(f"[DEBUG] get_image_description: Error response: {e.response.text}")
-            raise
+            print(f"DEBUG: Error getting image description: {e}")
+            return f"Error getting image description: {e}"
+        
+    def generate_answer(self, question: str, context: str) -> str:
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": prompt_template},
+                {"role": "user", "content": [{"type": "text", "text": question}]},
+                {"role": "assistant", "content": [{"type": "text", "text": context}]}
+            ],
+            "tools": tools,
+            "tool_choice": "required"
+        }
+        response = requests.post(self.url, headers=self.headers, json=payload)
+        response.raise_for_status()
+        return response.json()['choices'][0]['message']['tool_calls'][0]['function']['arguments']
+
 
 class Ollama:
     def __init__(self, model_name: str = "gemma3:1b"):
@@ -439,3 +326,4 @@ class Ollama:
         response = requests.post("http://localhost:11434/api/chat", json=payload)
         response.raise_for_status()
         return response.json()['choices'][0]['message']['content']
+    
